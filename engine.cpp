@@ -5,25 +5,41 @@
 #include <fstream>
 
 int main() {
-	std::ifstream("code.ez");
-	if (!file.is_open()) {
-		std::cerr << "error: cannot open file";
-	}
-	std::string line;
-	while (std::getline(file, line)) {
-		size_t position = line.find(target);
-		std::string target = "screenheight=";
-		if (position !=std::string::npos) {
-				size_t after_index = position + target.length();
-				std::string remaining_text = line.substr(after_index);
-		}
-		int screenheight = remaining_text;
-		std::string target = "screenwidth=";
-		if (position !=std::string::npos) {
-				size_t after_index = position + target.length();
-				std::string remaining_text = line.substr(after_index);
-		}
-		int screenwidth = remaining_text;
-	}
-	InitWindow(screenwidth, screenheight, "game")
+    int screenwidth = 800;
+    int screenheight = 450;
+    std::ifstream file("code.ez");
+    if (!file.is_open()) {
+        InitWindow(800,450,"error");
+        BeginDrawing();
+        ClearBackground(RAYWHITE);
+        DrawText("can't open file", 50, 50, 20, DARKGRAY);
+        EndDrawing();
+    }
+    std::string line;
+    while (std::getline(file, line)) {
+        std::string targetHeight = "screenheight=";
+        size_t posHeight = line.find(targetHeight);
+        if (posHeight != std::string::npos) {
+            size_t after_index = posHeight + targetHeight.length();
+            std::string remaining_text = line.substr(after_index);
+            screenheight = std::stoi(remaining_text);
+        }
+        std::string targetWidth = "screenwidth=";
+        size_t posWidth = line.find(targetWidth);
+        if (posWidth != std::string::npos) {
+            size_t after_index = posWidth + targetWidth.length();
+            std::string remaining_text = line.substr(after_index);
+            screenwidth = std::stoi(remaining_text);
+        }
+    }
+    file.close();
+    InitWindow(screenwidth, screenheight, "game");
+    SetTargetFPS(60);
+    while (!WindowShouldClose()) {
+        BeginDrawing();
+        ClearBackground(RAYWHITE);
+        EndDrawing();
+    }
+    CloseWindow();
+    return 0;
 }
