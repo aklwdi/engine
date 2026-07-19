@@ -4,17 +4,18 @@
 #include <iostream>
 #include <fstream>
 #include <sstream> 
-
+#include <vector>
+struct CharPos {
+    size_t index;
+    Rectangle bounds;
+};
 std::string LoadFileToString(const std::string& filename) {
     std::ifstream file(filename);
-    if (!file.is_open()) {
-        return "hi";
-    }
+    if (!file.is_open()) return "hi";
     std::stringstream buffer;
     buffer << file.rdbuf();
     return buffer.str();
 }
-// Helper function to save string back to disk safely
 void SaveStringToFile(const std::string& filename, const std::string& text) {
     std::ofstream out_file(filename);
     if (out_file.is_open()) {
@@ -26,6 +27,7 @@ int main() {
     InitWindow(800, 450, "Editor");
     const std::string filename = "code.ez";
     std::string textBuffer = LoadFileToString(filename);
+    size_t cursorIndex = textBuffer.length();
     int backspaceFrameCounter = 0;
     int cursorFrameCounter = 0;
     bool showCursor = true;
@@ -37,27 +39,47 @@ int main() {
         bool isHovered = CheckCollisionPointRec(mousePos, buttonBounds);
         if (isHovered && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
             textBuffer = preset1Code;
+            cursorIndex = textBuffer.length();
             SaveStringToFile(filename, textBuffer);
         }
         int key = GetCharPressed(); 
         while (key > 0) {
             if ((key >= 32) && (key <= 125)) {
-                textBuffer.push_back((char)key);
+                textBuffer.insert(cursorIndex, 1, (char)key);
+                cursorIndex++;
+                showCursor = true;
+                cursorFrameCounter = 0;
             }
             key = GetCharPressed();
         }
         if (IsKeyPressed(KEY_ENTER)) {
-            textBuffer.append("\n");
+            textBuffer.insert(cursorIndex, 1, '\n');
+            cursorIndex++;
+            showCursor = true;
+            cursorFrameCounter = 0;
         }
         if (IsKeyDown(KEY_BACKSPACE)) {
             backspaceFrameCounter++;
             if (IsKeyPressed(KEY_BACKSPACE) || (backspaceFrameCounter > 25 && backspaceFrameCounter % 3 == 0)) {
-                if (!textBuffer.empty()) {
-                    textBuffer.pop_back();
+                if (cursorIndex > 0 && !textBuffer.empty()) {
+                    textBuffer.erase(cursorIndex - 1, 1);
+                    cursorIndex--;
+                    showCursor = true;
+                    cursorFrameCounter = 0;
                 }
             }
         } else {
             backspaceFrameCounter = 0;
+        }
+        if (IsKeyPressed(KEY_LEFT) && cursorIndex > 0) {
+            cursorIndex--;
+            showCursor = true;
+            cursorFrameCounter = 0;
+        }
+        if (IsKeyPressed(KEY_RIGHT) && cursorIndex < textBuffer.length()) {
+            cursorIndex++;
+            showCursor = true;
+            cursorFrameCounter = 0;
         }
         if ((IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL)) && IsKeyPressed(KEY_S)) {
             SaveStringToFile(filename, textBuffer);
@@ -74,19 +96,60 @@ int main() {
         int fontSize = 20;
         int textX = startX;
         int textY = startY;
+        int cursorRenderX = startX;
+        int cursorRenderY = startY;
+        std::vector<CharPos> clickMap;
+        if (cursorIndex == 0) {
+            cursorRenderX = textX;
+            cursorRenderY = textY;
+        }
         for (size_t i = 0; i < textBuffer.length(); i++) {
             char c = textBuffer[i];
+            int glyphWidth = 0;
+            if (c != '\n') {
+                char str[] = { c, '\0' };
+                glyphWidth = MeasureText(str, fontSize) + 2;
+                Rectangle charBox = { (float)textX, (float)textY, (float)glyphWidth, (float)(fontSize + 5) };
+                clickMap.push_back({ i, charBox });
+                DrawText(str, textX, textY, fontSize, RAYWHITE);
+            } else {
+                Rectangle nlBox = { (float)textX, (float)textY, 15.0f, (float)(fontSize + 5) };
+                clickMap.push_back({ i, nlBox });
+            }
             if (c == '\n') {
                 textX = startX;
                 textY += fontSize + 5;
             } else {
-                char str[] = { c, '\0' };
-                DrawText(str, textX, textY, fontSize, RAYWHITE);
-                textX += MeasureText(str, fontSize) + 2;
+                textX += glyphWidth;
+            }
+            if (i + 1 == cursorIndex) {
+                cursorRenderX = textX;
+                cursorRenderY = textY;
+            }
+        }
+        if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && !isHovered) {
+            bool foundClick = false;
+            for (const auto& cp : clickMap) {
+                if (CheckCollisionPointRec(mousePos, cp.bounds)) {
+                    if (mousePos.x > cp.bounds.x + cp.bounds.width / 2 && textBuffer[cp.index] != '\n') {
+                        cursorIndex = cp.index + 1;
+                    } else {
+                        cursorIndex = cp.index;
+                    }
+                    foundClick = true;
+                    showCursor = true;
+                    cursorFrameCounter = 0;
+                    break;
+                }
+            }
+            if (!foundClick && mousePos.x >= startX && mousePos.y >= startY && mousePos.y <= textY + fontSize + 5) {
+                cursorIndex = textBuffer.length();
+                showCursor = true;
+                cursorFrameCounter = 0;
             }
         }
         if (showCursor) {
-            DrawRectangle(textX, textY, 2, fontSize, LIGHTGRAY);
+            DrawRectangle(cursorRenderX, cursorRenderY, 2, fontSize, LIGHTGRAY);
         }
         Color buttonColor = DARKGRAY;
         if (isHovered) {
