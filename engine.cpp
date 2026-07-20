@@ -1,10 +1,16 @@
 #include <stdio.h>
-#include <raylib.h>
 #include <string>
 #include <iostream>
 #include <fstream>
 #include <vector>
 #include <sstream>
+#include <algorithm>
+#include <cctype>
+
+// If your raylib is installed globally in MSYS2, use <raylib.h>
+// Otherwise, keep your absolute path: #include <C:\raylib\raylib\src\raylib.h>
+#include <raylib.h> 
+
 struct GameRect {
     int id;
     int x;
@@ -13,38 +19,64 @@ struct GameRect {
     int h;
     Color color;
 };
+
 struct CollisionRule {
     int objA;
     int objB;
 };
+
 struct LoopCommand {
     int objId;
     int speedX;
     int speedY;
 };
+
 struct KeyCommand {
     int key;
     std::vector<LoopCommand> actions;
 };
-int getRaylibKey(const std::string& keyStr) {
-    if (keyStr == "W" || keyStr == "w") return KEY_W;
-    if (keyStr == "A" || keyStr == "a") return KEY_A;
-    if (keyStr == "S" || keyStr == "s") return KEY_S;
-    if (keyStr == "D" || keyStr == "d") return KEY_D;
-    if (keyStr == "UP" || keyStr == "up") return KEY_UP;
-    if (keyStr == "DOWN" || keyStr == "down") return KEY_DOWN;
-    if (keyStr == "LEFT" || keyStr == "left") return KEY_LEFT;
-    if (keyStr == "RIGHT" || keyStr == "right") return KEY_RIGHT;
-    if (keyStr == "SPACE" || keyStr == "space") return KEY_SPACE;
-    if (!keyStr.empty()) return keyStr;
-    return 0;
+
+// Helper function to remove trailing/leading spaces
+std::string trim(const std::string& str) {
+    size_t first = str.find_first_not_of(" \t\r\n");
+    if (first == std::string::npos) return "";
+    size_t last = str.find_last_not_of(" \t\r\n");
+    return str.substr(first, (last - first + 1));
 }
-int getVarValue(const std::string& name, int sw, int sh) {
+
+int getRaylibKey(const std::string& keyStr) {
+    std::string k = trim(keyStr);
+    if (k == "W" || k == "w") return KEY_W;
+    if (k == "A" || k == "a") return KEY_A;
+    if (k == "S" || k == "s") return KEY_S;
+    if (k == "D" || k == "d") return KEY_D;
+    if (k == "UP" || k == "up") return KEY_UP;
+    if (k == "DOWN" || k == "down") return KEY_DOWN;
+    if (k == "LEFT" || k == "left") return KEY_LEFT;
+    if (k == "RIGHT" || k == "right") return KEY_RIGHT;
+    if (k == "SPACE" || k == "space") return KEY_SPACE;
+    return 0; // Fixed: Removed the invalid "return keyStr;"
+}
+
+int getVarValue(const std::string& nameStr, int sw, int sh) {
+    std::string name = trim(nameStr);
     if (name == "screenwidth") return sw;
     if (name == "screenheight") return sh;
-    if (!name.empty() && isdigit(name)) return std::stoi(name);
+    
+    if (!name.empty()) {
+        bool isNumber = true;
+        size_t start = (name[0] == '-') ? 1 : 0;
+        for (size_t i = start; i < name.length(); i++) {
+            if (!std::isdigit(static_cast<unsigned char>(name[i]))) {
+                isNumber = false;
+                break;
+            }
+        }
+        if (isNumber && name.length() > start) return std::stoi(name);
+    }
     return 0;
 }
+
 int parseValue(const std::string& token, int sw, int sh) {
     std::string ops = "+-*/x";
     size_t op_pos = std::string::npos;
@@ -69,6 +101,7 @@ int parseValue(const std::string& token, int sw, int sh) {
     }
     return getVarValue(token, sw, sh);
 }
+
 int main() {
     int screenwidth = 800;
     int screenheight = 450;
@@ -76,6 +109,7 @@ int main() {
     std::vector<CollisionRule> rules;
     std::vector<LoopCommand> loopCommands;
     std::vector<KeyCommand> keyCommands;
+    
     std::ifstream file("code.ez");
     if (!file.is_open()) {
         InitWindow(800, 450, "error");
@@ -89,13 +123,18 @@ int main() {
         CloseWindow();
         return 1;
     }
+    
     std::string line;
     int rectCounter = 1;
     bool inForeverLoop = false;
     bool inKeyBlock = false;
     KeyCommand currentKeyCmd;
+    
     while (std::getline(file, line)) {
-        if (line.find("forever{") != std::string::npos) {
+        line = trim(line);
+        if (line.empty()) continue;
+
+        if (line.find("forever{") != std::string::npos || line.find("forever {") != std::string::npos) {
             inForeverLoop = true;
             continue;
         }
@@ -103,6 +142,7 @@ int main() {
             inForeverLoop = false;
             continue;
         }
+        
         size_t if_kd_pos = line.find("if(keydown(");
         if (if_kd_pos == std::string::npos) {
             if_kd_pos = line.find("if (keydown(");
@@ -123,6 +163,7 @@ int main() {
             inKeyBlock = false;
             continue;
         }
+        
         size_t move_pos = line.find("move(");
         if (move_pos != std::string::npos) {
             size_t close_pos = line.find(")");
@@ -132,9 +173,9 @@ int main() {
                 std::string s_id, s_sx, s_sy;
                 if (std::getline(ss, s_id, ',') && std::getline(ss, s_sx, ',') && std::getline(ss, s_sy, ',')) {
                     LoopCommand cmd;
-                    cmd.objId = std::stoi(s_id);
-                    cmd.speedX = std::stoi(s_sx);
-                    cmd.speedY = std::stoi(s_sy);
+                    cmd.objId = std::stoi(trim(s_id));
+                    cmd.speedX = std::stoi(trim(s_sx));
+                    cmd.speedY = std::stoi(trim(s_sy));
                     if (inKeyBlock) {
                         currentKeyCmd.actions.push_back(cmd);
                     } else if (inForeverLoop) {
@@ -144,11 +185,13 @@ int main() {
             }
             continue;
         }
+        
         if (inForeverLoop || inKeyBlock) continue;
+        
         size_t delimiter_pos = line.find('=');
         if (delimiter_pos != std::string::npos) {
-            std::string var_name = line.substr(0, delimiter_pos);
-            std::string var_value = line.substr(delimiter_pos + 1);
+            std::string var_name = trim(line.substr(0, delimiter_pos));
+            std::string var_value = trim(line.substr(delimiter_pos + 1));
             if (var_name == "screenwidth") {
                 screenwidth = std::stoi(var_value);
             } else if (var_name == "screenheight") {
@@ -166,11 +209,12 @@ int main() {
                     r.y = parseValue(s_y, screenwidth, screenheight);
                     r.w = parseValue(s_w, screenwidth, screenheight);
                     r.h = parseValue(s_h, screenwidth, screenheight);
-                    r.color = {(unsigned char)std::stoi(s_r), (unsigned char)std::stoi(s_g), (unsigned char)std::stoi(s_b), 255};
+                    r.color = {(unsigned char)std::stoi(trim(s_r)), (unsigned char)std::stoi(trim(s_g)), (unsigned char)std::stoi(trim(s_b)), 255};
                     rectangles.push_back(r);
                 }
             }
         }
+        
         size_t if_pos = line.find("if(object(");
         if (if_pos != std::string::npos) {
             size_t touch_pos = line.find(").touchobject(");
@@ -181,8 +225,8 @@ int main() {
                     std::string idB_str = line.substr(touch_pos + 14, then_pos - (touch_pos + 14));
                     if (!idA_str.empty() && !idB_str.empty()) {
                         CollisionRule rule;
-                        rule.objA = std::stoi(idA_str);
-                        rule.objB = std::stoi(idB_str);
+                        rule.objA = std::stoi(trim(idA_str));
+                        rule.objB = std::stoi(trim(idB_str));
                         rules.push_back(rule);
                     }
                 }
@@ -190,8 +234,10 @@ int main() {
         }
     }
     file.close();
+    
     InitWindow(screenwidth, screenheight, "game");
     SetTargetFPS(60);
+    
     while (!WindowShouldClose()) {
         for (const auto& cmd : loopCommands) {
             for (auto& r : rectangles) {
@@ -213,32 +259,17 @@ int main() {
                 }
             }
         }
-        bool ruleConditionMet = false;
-        for (const auto& rule : rules) {
-            const GameRect* ptrA = nullptr;
-            const GameRect* ptrB = nullptr;
-            for (const auto& r : rectangles) {
-                if (r.id == rule.objA) ptrA = &r;
-                if (r.id == rule.objB) ptrB = &r;
-            }
-            if (ptrA && ptrB) {
-                Rectangle rA = {(float)ptrA->x, (float)ptrA->y, (float)ptrA->w, (float)ptrA->h};
-                Rectangle rB = {(float)ptrB->x, (float)ptrB->y, (float)ptrB->w, (float)ptrB->h};
-                if (CheckCollisionRecs(rA, rB)) {
-                    ruleConditionMet = true;
-                }
-            }
-        }
+        
         BeginDrawing();
         ClearBackground(RAYWHITE);
+        
         for (const auto& r : rectangles) {
             DrawRectangle(r.x, r.y, r.w, r.h, r.color);
         }
-        if (ruleConditionMet) {
-            DrawText("COLLISION TRIGGERED!", 10, 10, 20, RED);
-        }
+        
         EndDrawing();
     }
+    
     CloseWindow();
     return 0;
 }
